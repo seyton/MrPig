@@ -76,6 +76,7 @@ class ViewController: UIViewController {
         
         scnView.scene = splashScene
         scnView.delegate = self
+        gameScene.physicsWorld.contactDelegate = self
     }
     
     func setupNodes() {
@@ -195,6 +196,37 @@ class ViewController: UIViewController {
     }
     
     func setupSounds() {
+        
+        if game.state == .TapToPlay {
+            
+            let music = SCNAudioSource(fileNamed: "MrPig.scnassets/Audio/Music.mp3")
+            
+            music?.volume = 0.3
+            music?.loops = true
+            music?.shouldStream = true
+            music?.positional = false
+            
+            let musicPlayer = SCNAudioPlayer(source: music!)
+            splashScene.rootNode.addAudioPlayer(musicPlayer)
+        }
+        else if game.state == .Playing {
+            
+            let traffic = SCNAudioSource(fileNamed: "MrPig.scnassets/Audio/Traffic.mp3")
+            
+            traffic?.volume = 0.3
+            traffic?.loops = true
+            traffic?.shouldStream = true
+            traffic?.positional = true
+            
+            let trafficPlayer = SCNAudioPlayer(source: traffic!)
+            gameScene.rootNode.addAudioPlayer(trafficPlayer)
+            
+            game.loadSound("Jump", fileNamed: "MrPig.scnassets/Audio/Jump.wav")
+            game.loadSound("Blocked", fileNamed: "MrPig.scnassets/Audio/Blocked.wav")
+            game.loadSound("Crash", fileNamed: "MrPig.scnassets/Audio/Crash.wav")
+            game.loadSound("CollectCoin", fileNamed: "MrPig.scnassets/Audio/CollectCoin.wav")
+            game.loadSound("BankCoin", fileNamed: "MrPig.scnassets/Audio/BankCoin.wav")
+        }
     }
     
     override func didReceiveMemoryWarning() {
@@ -219,10 +251,22 @@ class ViewController: UIViewController {
     
     func handleGesture(sender: UISwipeGestureRecognizer) {
 
-        guard game.state == .Playing else {
-            return
-        }
+        guard game.state == .Playing else { return }
+
+        let activeFrontCollision = activeCollisionsBitMask & BitMaskFront == BitMaskFront
+        let activeBackCollision = activeCollisionsBitMask & BitMaskBack == BitMaskBack
+        let activeLeftCollision = activeCollisionsBitMask & BitMaskLeft == BitMaskLeft
+        let activeRightCollision = activeCollisionsBitMask & BitMaskRight == BitMaskRight
         
+        guard (sender.direction == .Up && !activeFrontCollision)  ||
+            (sender.direction == .Down && !activeBackCollision) ||
+            (sender.direction == .Left && !activeLeftCollision) ||
+            (sender.direction == .Right && !activeRightCollision)  else {
+        
+                game.playSound(pigNode, name: "Blocked")
+                return
+        }
+
         switch sender.direction {
             
         case UISwipeGestureRecognizerDirection.Up:
@@ -245,11 +289,33 @@ class ViewController: UIViewController {
         default:
             break
         }
+        
+        game.playSound(pigNode, name: "Jump")
     }
     
     func updatePositions() {
         
         collisionNode.position = pigNode.presentationNode.position
+        
+        let lerpX = (pigNode.position.x - cameraFollowNode.position.x) * 0.05
+        let lerpZ = (pigNode.position.z - cameraFollowNode.position.z) * 0.05
+        
+        cameraFollowNode.position.x += lerpX
+        cameraFollowNode.position.z += lerpZ
+        lightFollowNode.position = cameraFollowNode.position
+    }
+    
+    func updateTraffic() {
+        
+        for node in trafficNode.childNodes {
+            
+            if node.position.x > 25 {
+                node.position.x = -25
+            }
+            else if node.position.x < -25 {
+                node.position.x = 25
+            }
+        }
     }
     
     //MARK: - Gmae Methods
@@ -294,12 +360,77 @@ extension ViewController: SCNSceneRendererDelegate {
     
     func renderer(renderer: SCNSceneRenderer, updateAtTime time: NSTimeInterval) {
         
-        guard game.state == .Playing else {
-            return
-        }
+        guard game.state == .Playing else { return }
         
         game.updateHUD()
         updatePositions()
+        updateTraffic()
+    }
+}
+
+//MARK: - SCNPhysicsContactDelegate
+extension ViewController: SCNPhysicsContactDelegate {
+ 
+    func physicsWorld(world: SCNPhysicsWorld, didBeginContact contact: SCNPhysicsContact) {
+        
+        guard game.state == .Playing else { return }
+        
+        var collisionBoxNode: SCNNode!
+        if contact.nodeA.physicsBody?.categoryBitMask == BitMaskObstacle {
+            collisionBoxNode = contact.nodeB
+        }
+        else {
+            collisionBoxNode = contact.nodeA
+        }
+        
+        activeCollisionsBitMask |= collisionBoxNode.physicsBody!.categoryBitMask
+        
+        var contactNode: SCNNode!
+        
+        if contact.nodeA.physicsBody?.categoryBitMask == BitMaskPig {
+            contactNode = contact.nodeB
+        }
+        else {
+            contactNode = contact.nodeA
+        }
+        
+        if contactNode.physicsBody?.categoryBitMask == BitMaskVehicle {
+            game.playSound(pigNode, name: "Crash")
+            stopGame()
+        }
+        
+        if contactNode.physicsBody?.categoryBitMask == BitMaskCoin {
+            
+            contactNode.hidden = true
+            contactNode.runAction(SCNAction.waitForDurationThenRunBlock(10, block: { (node) in
+                node.hidden = false
+            }))
+            game.playSound(pigNode, name: "CollectCoin")
+            game.collectCoin()
+        }
+
+        if contactNode.physicsBody?.categoryBitMask == BitMaskHouse {
+
+            if game.bankCoins() == true {
+                game.playSound(pigNode, name: "BankCoin")
+            }
+        }
+    }
+    
+    func physicsWorld(world: SCNPhysicsWorld, didEndContact contact: SCNPhysicsContact) {
+        
+        guard game.state == .Playing else { return }
+
+        var collisionBoxNode: SCNNode!
+        
+        if contact.nodeA.physicsBody?.categoryBitMask == BitMaskObstacle {
+            collisionBoxNode = contact.nodeB
+        }
+        else {
+            collisionBoxNode = contact.nodeA
+        }
+        
+        activeCollisionsBitMask &= ~collisionBoxNode.physicsBody!.categoryBitMask
     }
 }
 
