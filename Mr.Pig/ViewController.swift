@@ -23,6 +23,12 @@ class ViewController: UIViewController {
     var cameraFollowNode: SCNNode!
     var lightFollowNode: SCNNode!
     var trafficNode: SCNNode!
+
+    var collisionNode: SCNNode!
+    var frontCollisionNode: SCNNode!
+    var backCollisionNode: SCNNode!
+    var leftCollisionNode: SCNNode!
+    var rightCollisionNode: SCNNode!
     
     var driveLeftAction: SCNAction!
     var driveRightAction: SCNAction!
@@ -34,6 +40,19 @@ class ViewController: UIViewController {
     
     var triggerGameOver: SCNAction!
     
+    let BitMaskPig = 1
+    let BitMaskVehicle = 2
+    let BitMaskObstacle = 4
+    let BitMaskFront = 8
+    let BitMaskBack = 16
+    let BitMaskLeft = 32
+    let BitMaskRight = 64
+    let BitMaskCoin = 128
+    let BitMaskHouse = 256
+    
+    var activeCollisionsBitMask: Int = 0
+
+    //MARK: - Methods
     override func viewDidLoad() {
         super.viewDidLoad()
         
@@ -56,6 +75,7 @@ class ViewController: UIViewController {
         splashScene = SCNScene(named: "/MrPig.scnassets/SplashScene.scn")
         
         scnView.scene = splashScene
+        scnView.delegate = self
     }
     
     func setupNodes() {
@@ -68,6 +88,20 @@ class ViewController: UIViewController {
         cameraFollowNode = gameScene.rootNode.childNodeWithName("FollowCamera", recursively: true)
         lightFollowNode = gameScene.rootNode.childNodeWithName("FollowLight", recursively: true)
         trafficNode = gameScene.rootNode.childNodeWithName("Traffic", recursively: true)
+        
+        collisionNode = gameScene.rootNode.childNodeWithName("Collisions", recursively: true)
+        frontCollisionNode = gameScene.rootNode.childNodeWithName("Front", recursively: true)
+        backCollisionNode = gameScene.rootNode.childNodeWithName("Back", recursively: true)
+        leftCollisionNode = gameScene.rootNode.childNodeWithName("Left", recursively: true)
+        rightCollisionNode = gameScene.rootNode.childNodeWithName("Right", recursively: true)
+        
+        pigNode.physicsBody?.contactTestBitMask = BitMaskVehicle | BitMaskCoin | BitMaskHouse
+        
+        frontCollisionNode.physicsBody?.contactTestBitMask = BitMaskObstacle
+        backCollisionNode.physicsBody?.contactTestBitMask = BitMaskObstacle
+        leftCollisionNode.physicsBody?.contactTestBitMask = BitMaskObstacle
+        rightCollisionNode.physicsBody?.contactTestBitMask = BitMaskObstacle
+        
     }
     
     func setupActions() {
@@ -213,6 +247,11 @@ class ViewController: UIViewController {
         }
     }
     
+    func updatePositions() {
+        
+        collisionNode.position = pigNode.presentationNode.position
+    }
+    
     //MARK: - Gmae Methods
     func startGame() {
         
@@ -249,6 +288,22 @@ class ViewController: UIViewController {
         }
     }
 }
+
+//MARK: - SCNSceneRendererDelegate
+extension ViewController: SCNSceneRendererDelegate {
+    
+    func renderer(renderer: SCNSceneRenderer, updateAtTime time: NSTimeInterval) {
+        
+        guard game.state == .Playing else {
+            return
+        }
+        
+        game.updateHUD()
+        updatePositions()
+    }
+}
+
+//MARK: - Selector
 private extension Selector {
     
     static let handleGesture = #selector(ViewController.handleGesture(_:))
