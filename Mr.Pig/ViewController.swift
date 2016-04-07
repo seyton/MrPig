@@ -24,6 +24,9 @@ class ViewController: UIViewController {
     var lightFollowNode: SCNNode!
     var trafficNode: SCNNode!
     
+    var driveLeftAction: SCNAction!
+    var driveRightAction: SCNAction!
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         
@@ -61,10 +64,35 @@ class ViewController: UIViewController {
     }
     
     func setupActions() {
-        
+     
+        driveLeftAction = SCNAction.repeatActionForever(SCNAction.moveBy(SCNVector3Make(-2.0, 0, 0), duration: 1.0))
+        driveRightAction = SCNAction.repeatActionForever(SCNAction.moveBy(SCNVector3Make(2.0, 0, 0), duration: 1.0))
     }
     
     func setupTraffic() {
+        
+        for node in trafficNode.childNodes {
+            
+            if node.name?.containsString("Bus") == true {
+                
+                driveLeftAction.speed = 1.0
+                driveRightAction.speed = 1.0
+            }
+            else {
+
+                driveLeftAction.speed = 2.0
+                driveRightAction.speed = 2.0
+            }
+            
+            if node.eulerAngles.y < 0 {
+                
+                node.runAction(driveLeftAction)
+            }
+            else {
+                
+                node.runAction(driveRightAction)
+            }
+        }
     }
     
     func setupGestures() {
